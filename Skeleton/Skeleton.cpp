@@ -76,27 +76,27 @@ typedef Dnum<vec2> Dnum2;
 const int tessellationLevel = 20;
 
 //---------------------------
-struct ProjectiveCamera { // 3D camera
+struct Camera { // 3D camera
 //---------------------------
 	vec3 wEye, wLookat, wVup;   // extrinsic
 	float fov, asp, fp, bp;		// intrinsic
 public:
-	ProjectiveCamera() {
+	Camera() {
 		asp = (float)windowWidth / windowHeight;
 		fov = 75.0f * (float)M_PI / 180.0f;
-		fp = 0.01; bp = 100;
+		fp = 0.001; bp = 100;
 	}
 	mat4 V() { // view matrix: translates the center to the origin
 		vec3 w = normalize(wEye - wLookat);
 		vec3 u = normalize(cross(wVup, w));
 		vec3 v = cross(w, u);
 		return TranslateMatrix(wEye * (-1)) * mat4(u.x, v.x, w.x, 0,
-			u.y, v.y, w.y, 0,
-			u.z, v.z, w.z, 0,
-			0, 0, 0, 1);
+													u.y, v.y, w.y, 0,
+													u.z, v.z, w.z, 0,
+													0, 0, 0, 1);
 	}
 
-	mat4 P() { // projection matrix
+	virtual mat4 P() { // projection matrix
 		return mat4(1 / (tan(fov / 2) * asp), 0, 0, 0,
 					0, 1 / tan(fov / 2), 0, 0,
 					0, 0, -(fp + bp) / (bp - fp), -1,
@@ -104,22 +104,25 @@ public:
 	}
 };
 
-struct OrtographicCamera : ProjectiveCamera{ 
+struct OrtographicCamera : Camera{ 
 
 public:
 	mat4 P() { // projection matrix
-		return mat4(1 , 0, 0, 0,
-					0, 1, 0, 0,
-					0, 0, -2 / (bp - fp), -1*(bp+fp)/(bp-fp),
+		return mat4(1.0f , 0, 0, 0,
+					0, 1.0f, 0, 0,
+					0, 0, -2.0f / (bp - fp), -1.0f*(bp+fp)/(bp-fp),
 					0, 0, 0, 1);
 	}
 };
+
+
 
 //---------------------------
 struct Material {
 	//---------------------------
 	vec3 kd, ks, ka;
 	float shininess;
+	Material() {};
 };
 
 vec4 quaternionMultiply(vec4 q1, vec4 q2) {
@@ -131,27 +134,44 @@ vec4 quaternionMultiply(vec4 q1, vec4 q2) {
 	return q;
 }
 
+float length(const vec4& v) { return sqrtf(dot(v, v)); }
+
 //---------------------------
 struct Light {
 	//---------------------------
 	vec3 La, Le;
+	vec4 originalPos;
 	vec4 wLightPos; // homogeneous coordinates, can be at ideal point
 	vec4 rotationAxis;
 public: 
 	void Animate(float tstart, float tend) {
-		float dt = tend ;
-		vec4 q = vec4 (cosf(dt / 4) * rotationAxis.x, 
-						sinf(dt / 4)*cosf(dt) / 2 * rotationAxis.y,
-						sinf(dt / 4) * sinf(dt) / 2 * rotationAxis.z,
-						sinf(dt / 4)*sqrtf(3 / 4) );
-		vec4 qinv = vec4 (-1*cosf(dt / 4) * rotationAxis.x,
-							-1 * sinf(dt / 4)*cosf(dt) / 2 * rotationAxis.y,
-							-1 * sinf(dt / 4) * sinf(dt) / 2 * rotationAxis.z, 
-							sin(dt / 4)*sqrtf(3 / 4) );
-		printf("1: %lf\n", wLightPos.x);
-		wLightPos = quaternionMultiply(q, wLightPos);
+		float dt = tend;
+		//rotationAxis = rotationAxis / length(rotationAxis);
+		
+			vec4 q = vec4(cosf(dt / 4.0f),
+				sinf(dt / 4.0f) * cosf(dt) / 2.0f ,
+				sinf(dt / 4.0f) * sinf(dt) / 2.0f ,
+				sinf(dt / 4.0f) * sqrtf(3.0f / 4.0f));
+
+			vec4 qinv = vec4(-1 * cosf(dt / 4.0f),
+				-1 * sinf(dt / 4.0f) * cosf(dt) / 2.0f,
+				-1 * sinf(dt / 4.0f) * sinf(dt) / 2.0f,
+				sinf(dt / 4.0f)* sqrtf(3.0f / 4.0f));
+				
+
+		//vec4 rot = vec4(rotationAxis.x, rotationAxis.y, rotationAxis.z, 0);
+		//wLightPos = wLightPos - rot;
+		//wLightPos = wLightPos - rotationAxis;
+
+		q = q/length(q);
+		qinv = qinv / length(qinv);
+		printf("1: %lf  %lf  %lf\n", wLightPos.x, wLightPos.y, wLightPos.z);
+		wLightPos = quaternionMultiply(q, originalPos - rotationAxis);
+
 		printf("2: %lf\n", wLightPos.x);
 		wLightPos = quaternionMultiply(wLightPos, qinv);
+
+		wLightPos = wLightPos + rotationAxis;
 		printf("3: %lf\n", wLightPos.x);
 		
 	}
@@ -171,12 +191,26 @@ public:
 	}
 };
 
+class SimpleTexture : public Texture {
+public:
+	SimpleTexture() : Texture() {
+		std::vector<vec4> image(1);
+		
+		float r = (float)std::rand() / RAND_MAX ;
+		float g = (float)std::rand() / RAND_MAX ;
+		float b = (float)std::rand() / RAND_MAX ;
+
+		image[0] = vec4(r, g, b, 1);
+		create(1, 1, image, GL_NEAREST);
+	}
+};
+
 //---------------------------
 struct RenderState {
 	//---------------------------
 	mat4	           MVP, M, Minv, V, P;
 	Material* material;
-	std::vector<Light> lights;
+	std::vector<Light*> lights;
 	Texture* texture;
 	vec3	           wEye;
 };
@@ -201,81 +235,6 @@ public:
 	}
 };
 
-//---------------------------
-class GouraudShader : public Shader {
-	//---------------------------
-	const char* vertexSource = R"(
-		#version 330
-		precision highp float;
-
-		struct Light {
-			vec3 La, Le;
-			vec4 wLightPos;
-		};
-		
-		struct Material {
-			vec3 kd, ks, ka;
-			float shininess;
-		};
-
-		uniform mat4  MVP, M, Minv;  // MVP, Model, Model-inverse
-		uniform Light[8] lights;     // light source direction 
-		uniform int   nLights;		 // number of light sources
-		uniform vec3  wEye;          // pos of eye
-		uniform Material  material;  // diffuse, specular, ambient ref
-
-		layout(location = 0) in vec3  vtxPos;            // pos in modeling space
-		layout(location = 1) in vec3  vtxNorm;      	 // normal in modeling space
-
-		out vec3 radiance;		    // reflected radiance
-
-		void main() {
-			gl_Position = vec4(vtxPos, 1) * MVP; // to NDC
-			// radiance computation
-			vec4 wPos = vec4(vtxPos, 1) * M;	
-			vec3 V = normalize(wEye * wPos.w - wPos.xyz);
-			vec3 N = normalize((Minv * vec4(vtxNorm, 0)).xyz);
-			if (dot(N, V) < 0) N = -N;	// prepare for one-sided surfaces like Mobius or Klein
-
-			radiance = vec3(0, 0, 0);
-			for(int i = 0; i < nLights; i++) {
-				vec3 L = normalize(lights[i].wLightPos.xyz * wPos.w - wPos.xyz * lights[i].wLightPos.w);
-				vec3 H = normalize(L + V);
-				float cost = max(dot(N,L), 0), cosd = max(dot(N,H), 0);
-				radiance += material.ka * lights[i].La + (material.kd * cost + material.ks * pow(cosd, material.shininess)) * lights[i].Le;
-			}
-		}
-	)";
-
-	// fragment shader in GLSL
-	const char* fragmentSource = R"(
-		#version 330
-		precision highp float;
-
-		in  vec3 radiance;      // interpolated radiance
-		out vec4 fragmentColor; // output goes to frame buffer
-
-		void main() {
-			fragmentColor = vec4(radiance, 1);
-		}
-	)";
-public:
-	GouraudShader() { create(vertexSource, fragmentSource, "fragmentColor"); }
-
-	void Bind(RenderState state) {
-		Use(); 		// make this program run
-		setUniform(state.MVP, "MVP");
-		setUniform(state.M, "M");
-		setUniform(state.Minv, "Minv");
-		setUniform(state.wEye, "wEye");
-		setUniformMaterial(*state.material, "material");
-
-		setUniform((int)state.lights.size(), "nLights");
-		for (unsigned int i = 0; i < state.lights.size(); i++) {
-			setUniformLight(state.lights[i], std::string("lights[") + std::to_string(i) + std::string("]"));
-		}
-	}
-};
 
 //---------------------------
 class PhongShader : public Shader {
@@ -357,8 +316,9 @@ class PhongShader : public Shader {
 				vec3 H = normalize(L + V);
 				float cost = max(dot(N,L), 0), cosd = max(dot(N,H), 0);
 				// kd and ka are modulated by the texture
+				float d = length(lights[i].wLightPos);
 				radiance += ka * lights[i].La + 
-                           (kd * texColor * cost + material.ks * pow(cosd, material.shininess)) * lights[i].Le;
+                           (kd * texColor * cost + material.ks * pow(cosd, material.shininess)) * lights[i].Le / pow(d, 2);
 			}
 			fragmentColor = vec4(radiance, 1);
 		}
@@ -377,71 +337,11 @@ public:
 
 		setUniform((int)state.lights.size(), "nLights");
 		for (unsigned int i = 0; i < state.lights.size(); i++) {
-			setUniformLight(state.lights[i], std::string("lights[") + std::to_string(i) + std::string("]"));
+			setUniformLight(*state.lights[i], std::string("lights[") + std::to_string(i) + std::string("]"));
 		}
 	}
 };
 
-//---------------------------
-class NPRShader : public Shader {
-	//---------------------------
-	const char* vertexSource = R"(
-		#version 330
-		precision highp float;
-
-		uniform mat4  MVP, M, Minv; // MVP, Model, Model-inverse
-		uniform	vec4  wLightPos;
-		uniform vec3  wEye;         // pos of eye
-
-		layout(location = 0) in vec3  vtxPos;            // pos in modeling space
-		layout(location = 1) in vec3  vtxNorm;      	 // normal in modeling space
-		layout(location = 2) in vec2  vtxUV;
-
-		out vec3 wNormal, wView, wLight;				// in world space
-		out vec2 texcoord;
-
-		void main() {
-		   gl_Position = vec4(vtxPos, 1) * MVP; // to NDC
-		   vec4 wPos = vec4(vtxPos, 1) * M;
-		   wLight = wLightPos.xyz * wPos.w - wPos.xyz * wLightPos.w;
-		   wView  = wEye * wPos.w - wPos.xyz;
-		   wNormal = (Minv * vec4(vtxNorm, 0)).xyz;
-		   texcoord = vtxUV;
-		}
-	)";
-
-	// fragment shader in GLSL
-	const char* fragmentSource = R"(
-		#version 330
-		precision highp float;
-
-		uniform sampler2D diffuseTexture;
-
-		in  vec3 wNormal, wView, wLight;	// interpolated
-		in  vec2 texcoord;
-		out vec4 fragmentColor;    			// output goes to frame buffer
-
-		void main() {
-		   vec3 N = normalize(wNormal), V = normalize(wView), L = normalize(wLight);
-		   if (dot(N, V) < 0) N = -N;	// prepare for one-sided surfaces like Mobius or Klein
-		   float y = (dot(N, L) > 0.5) ? 1 : 0.5;
-		   if (abs(dot(N, V)) < 0.2) fragmentColor = vec4(0, 0, 0, 1);
-		   else						 fragmentColor = vec4(y * texture(diffuseTexture, texcoord).rgb, 1);
-		}
-	)";
-public:
-	NPRShader() { create(vertexSource, fragmentSource, "fragmentColor"); }
-
-	void Bind(RenderState state) {
-		Use(); 		// make this program run
-		setUniform(state.MVP, "MVP");
-		setUniform(state.M, "M");
-		setUniform(state.Minv, "Minv");
-		setUniform(state.wEye, "wEye");
-		setUniform(*state.texture, std::string("diffuseTexture"));
-		setUniform(state.lights[0].wLightPos, "wLightPos");
-	}
-};
 
 //---------------------------
 class Geometry {
@@ -537,7 +437,6 @@ public:
 		Z = 0;
 	}
 
-
 };
 
 
@@ -551,6 +450,7 @@ struct Object {
 	vec3 scale, translation, rotationAxis;
 	float rotationAngle;
 public:
+	vec3 velocity=vec3(0,0,0);
 	Object(Shader* _shader, Material* _material, Texture* _texture, Geometry* _geometry) :
 		scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), rotationAxis(0, 0, 1), rotationAngle(0) {
 		shader = _shader;
@@ -576,34 +476,58 @@ public:
 		geometry->Draw();
 	}
 
-	virtual void Animate(float tstart, float tend) { rotationAngle = 0.0f * tend; }
+	virtual void Animate(float tstart, float tend) { 
+		rotationAngle = 0.0f * tend; 
+		translation = translation + velocity * (tend - tstart);
+		if (abs(translation.x) > 2) {
+			float dx = abs(translation.x) - 2;
+			translation.x = translation.x * -1;
+			if (translation.x < -2) translation.x += dx;
+			else translation.x += dx;
+			
+		}
+		if (abs(translation.y) > 2) {		
+			float dy = abs(translation.y) - 2;
+			translation.y = translation.y * -1;
+			if (translation.y < -2) translation.y += dy;
+			else translation.y += dy;
+		}
+	}
 };
 
+enum View{
+	ortographic, projective
+};
+
+float epsilon = 0.0001;
 //---------------------------
 class Scene {
 	//---------------------------
-	std::vector<Object*> objects;
-	OrtographicCamera camera; // 3D camera
-	std::vector<Light> lights;
+	std::vector<Light*> lights;
+	Camera* projectiveCamera = new Camera(); // 3D camera
+	OrtographicCamera* ortographicCamera = new OrtographicCamera();
 public:
-	void Build() {
-		// Shaders
-		Shader* phongShader = new PhongShader();
-		Shader* gouraudShader = new GouraudShader();
-		Shader* nprShader = new NPRShader();
-
+	View view = ortographic;
+	std::vector<Object*> objects;
+	Object* currentBall;
+	Object* nextBall;
+	
+	
+	void Build() {	
 		// Materials
+		Shader* phongShader = new PhongShader();
 		Material* material0 = new Material;
 		material0->kd = vec3(0.6f, 0.4f, 0.2f);
 		material0->ks = vec3(4, 4, 4);
 		material0->ka = vec3(0.1f, 0.1f, 0.1f);
-		material0->shininess = 100;
+		material0->shininess = 10;
 
 		Material* material1 = new Material;
 		material1->kd = vec3(0.8f, 0.6f, 0.4f);
 		material1->ks = vec3(0.3f, 0.3f, 0.3f);
 		material1->ka = vec3(0.2f, 0.2f, 0.2f);
 		material1->shininess = 30;
+		
 
 		// Textures
 		Texture* texture4x8 = new CheckerBoardTexture(4, 8);
@@ -614,12 +538,13 @@ public:
 		Geometry* plain = new RubberPlain();
 
 		// Create objects by setting up their vertex data on the GPU
-		/*Object* sphereObject1 = new Object(phongShader, material0, texture15x20, sphere);
-		//sphereObject1->translation = vec3(1, 1, 1);
-		sphereObject1->scale = vec3(1, 1, 1);
-		objects.push_back(sphereObject1);*/
+		Object* sphereObject1 = new Object(phongShader, material0, new SimpleTexture(), sphere);
+		sphereObject1->translation = vec3(-1.8f, -1.8f, 0.1f);
+		sphereObject1->scale = vec3(0.1f, 0.1f, 0.1f);
+		objects.push_back(sphereObject1);
+		nextBall = sphereObject1;
 
-		Object* plainObject = new Object(phongShader, material1, texture15x20, plain);
+		Object* plainObject = new Object(phongShader, material0, texture15x20, plain);
 		//plainObject->translation = vec3(-9, 3, 0);
 		plainObject->scale = vec3(2, 2, 1);
 		objects.push_back(plainObject);
@@ -628,38 +553,53 @@ public:
 		
 
 		// Camera
-		camera.wEye = vec3(0, 0, 1);
-		camera.wLookat = vec3(0, 0, 0);
-		camera.wVup = vec3(0, 1, 0);
+		ortographicCamera->wEye = vec3(0, 0, 1);
+		ortographicCamera->wLookat = vec3(0, 0, 0);
+		ortographicCamera->wVup = vec3(0, 1, 0);
+
+		projectiveCamera->wVup = vec3(0, 0, 1);
 
 		// Lights
-		lights.resize(1);
-		lights[0].wLightPos = vec4(-1.5f, 0, 2, 0);	// ideal point -> directional light source
-		lights[0].La = vec3(0.1f, 0.1f, 0.1f);
-		lights[0].Le = vec3(1, 1, 1);
-		lights[0].rotationAxis = vec4(1.5f, 0, 0, 0);
+		lights.resize(2);
+		lights[0] = new Light();
+		lights[0]->wLightPos = vec4(-3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
+		lights[0]->originalPos = vec4(-3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
+		lights[0]->La = vec3(1.2f, 1.2f, 1.2f);
+		lights[0]->Le = vec3(5, 5, 5);
+		lights[0]->rotationAxis = vec4(3.5f, 0, 1.0f, 1.0f);
+		//lights[0]->rotationAxis = normalize(lights[0]->rotationAxis);
 		
-
-		/*lights[1].wLightPos = vec4(1.5f, 0, 2, 0);	// ideal point -> directional light source
-		lights[1].La = vec3(0.1f, 0.1f, 0.1f);
-		lights[1].Le = vec3(1, 1, 1);
-		lights[1].rotationAxis = vec4(-1.5f, 0, 0, 0);*/
+		lights[1] = new Light();
+		lights[1]->wLightPos = vec4(3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
+		lights[1]->originalPos = vec4(3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
+		lights[1]->La = vec3(1.2f, 1.2f, 1.2f);
+		lights[1]->Le = vec3(5, 5, 5);
+		lights[1]->rotationAxis = vec4(-3.5f, 0, 1.0f, 1.0f);
 
 		
 	}
 
 	void Render() {
 		RenderState state;
-		state.wEye = camera.wEye;
-		state.V = camera.V();
-		state.P = camera.P();
+		if (view == ortographic) {
+			state.wEye = ortographicCamera->wEye;
+			state.V = ortographicCamera->V();
+			state.P = ortographicCamera->P();
+		}
+		else {
+			projectiveCamera->wEye = currentBall->translation + normalize(currentBall->velocity)* (0.1f+epsilon);
+			projectiveCamera->wLookat = currentBall->velocity + currentBall->translation;
+			state.wEye = projectiveCamera->wEye;
+			state.V = projectiveCamera->V();
+			state.P = projectiveCamera->P();
+		}
 		state.lights = lights;
 		for (Object* obj : objects) obj->Draw(state);
 	}
 
 	void Animate(float tstart, float tend) {
 		for (Object* obj : objects) obj->Animate(tstart, tend);
-		for (Light light : lights) light.Animate(tstart, tend);
+		for (Light* light : lights) light->Animate(tstart, tend);
 	}
 };
 
@@ -682,13 +622,40 @@ void onDisplay() {
 }
 
 // Key of ASCII code pressed
-void onKeyboard(unsigned char key, int pX, int pY) { }
+void onKeyboard(unsigned char key, int pX, int pY) { 
+	if (key == ' ') {
+		if (scene.view == ortographic && scene.currentBall!=nullptr) 
+			scene.view = projective;
+		else 
+			scene.view = ortographic;
+	}
+}
 
 // Key of ASCII code released
 void onKeyboardUp(unsigned char key, int pX, int pY) { }
 
 // Mouse click event
-void onMouse(int button, int state, int pX, int pY) { }
+void onMouse(int button, int state, int pX, int pY) { 
+	float cX = 2.0f * pX / windowWidth - 1;
+	float cY = 1.0f - 2.0f * pY / windowHeight;
+	
+	if (button==GLUT_LEFT_BUTTON && state==GLUT_DOWN) {
+		scene.nextBall->velocity = vec3((cX+1.0f)/2.0f*1.5f, (cY + 1.0f) / 2.0f * 1.5f, 0.0f);
+		scene.currentBall = scene.nextBall;
+
+		Material* material0 = new Material;
+		material0->kd = vec3(0.6f, 0.4f, 0.2f);
+		material0->ks = vec3(4, 4, 4);
+		material0->ka = vec3(0.1f, 0.1f, 0.1f);
+		material0->shininess = 10;
+		Object* sphereObject = new Object(new PhongShader(), material0, new SimpleTexture(), new Sphere());
+		sphereObject->translation = vec3(-1.8f, -1.8f, 0.1f);
+		sphereObject->scale = vec3(0.1f, 0.1f, 0.1f);
+		scene.objects.push_back(sphereObject);
+		scene.nextBall = sphereObject;
+	}
+	
+}
 
 // Move mouse with key pressed
 void onMouseMotion(int pX, int pY) {
