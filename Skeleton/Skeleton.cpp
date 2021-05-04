@@ -445,6 +445,7 @@ public:
 			Dnum2 Hole = Pow((Pow(Pow(X - holes[i]->pos.x, 2) + Pow(Y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.05f), -1.0f);
 			Hole.f *= holes[i]->weight;
 			Z = Z - Hole;
+			if (Z.f < -2) Z.f = -2;
 		}
 	}
 
@@ -461,7 +462,7 @@ struct Object {
 	vec3 scale, translation, rotationAxis;
 	float rotationAngle;
 public:
-	bool valid = false;
+	bool valid = true;
 	vec3 velocity=vec3(0,0,0);
 	Object(Shader* _shader, Material* _material, Texture* _texture, ParamSurface* _geometry) :
 		scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), rotationAxis(0, 0, 1), rotationAngle(0) {
@@ -492,42 +493,47 @@ public:
 		rotationAngle = 0.0f * tend; 
 		if (valid) {
 			float dt = tend - tstart;
-			float z = 0;
-			for (size_t i = 0; i < holes.size(); i++) {
-				z -= holes[i]->weight * powf((powf(powf(translation.x - holes[i]->pos.x, 2) + powf(translation.y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.05f), -1.0f);
-			}
+			
 
 			//-(k (-h + x))/((-h + x)^2 + (-j + y)^2)^(3/2)
 			//-(k (-j + y))/((-h + x)^2 + (-j + y)^2)^(3/2)
 
-			//vec3 normal = vec3(-(holes[i]->weight * (-)));
 			vec3 normal = vec3(0, 0, 1);
 			for (size_t i = 0; i < holes.size(); i++) {
-				normal.x -= -1 * (holes[i]->weight * (-holes[i]->pos.x + translation.x)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
-				normal.y -= -1 * (holes[i]->weight * (-holes[i]->pos.y + translation.y)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+				normal.x = -1 * (holes[i]->weight * (-holes[i]->pos.x + translation.x)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+				normal.y = -1 * (holes[i]->weight * (-holes[i]->pos.y + translation.y)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
 			}
-			normal.x = -1 * normal.x;
-			normal.y = -1 * normal.y;
+			
 			normal = normalize(normal);
-			vec3 g = vec3(0, 0, -0.000001);
-			vec3 a = g * normal;
+			vec3 g = vec3(0, 0, -5);
+			float a = dot(g, normal);
 			vec3 perpendicular = a * normal;
 			vec3 parallel = g - perpendicular;
+			//printf("anim: %lf %lf %lf\n", parallel.x, parallel.y, parallel.z);
 			velocity = velocity + parallel * dt;
-			translation.z = z;
+			//printf("anim: %lf %lf %lf\n", velocity.x, velocity.y, velocity.z);
+			
 
 			translation = translation + velocity * (dt) ;
+			float z = 0;
+			for (size_t i = 0; i < holes.size(); i++) {
+				z -= holes[i]->weight * powf((powf(powf(translation.x - holes[i]->pos.x, 2) + powf(translation.y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.05f), -1.0f);
+				if (length(holes[i]->pos - vec2(translation.x, translation.y))  < 0.2f) valid = false; 
+			}
+			//printf("%lf %lf %lf\n", translation.x, translation.y, translation.z);
+			//if (translation.z < -0.07f) valid = false;
+			
 
+			translation.z = z;
 			normal = vec3(0, 0, 1);
 			for (size_t i = 0; i < holes.size(); i++) {
-				normal.x -= -1 * (holes[i]->weight * (-holes[i]->pos.x + translation.x)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
-				normal.y -= -1 * (holes[i]->weight * (-holes[i]->pos.y + translation.y)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+				normal.x = -1 * (holes[i]->weight * (-holes[i]->pos.x + translation.x)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+				normal.y = -1 * (holes[i]->weight * (-holes[i]->pos.y + translation.y)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
 			}
-			normal.x = -1 * normal.x;
-			normal.y = -1 * normal.y;
-
+			//printf("%lf %lf %lf\n", normal.x, normal.y, normal.z);
+			
 			translation = translation + normal * 0.1f;
-
+			
 			if (abs(translation.x) > 2) {
 				float dx = abs(translation.x) - 2;
 				translation.x = translation.x * -1;
@@ -542,7 +548,7 @@ public:
 				else translation.y += dy;
 			}
 
-			if (translation.z < -1) valid = false;
+			
 		}
 	}
 };
@@ -593,7 +599,7 @@ public:
 		Object* sphereObject1 = new Object(phongShader, material0, new SimpleTexture(), sphere);
 		sphereObject1->translation = vec3(-1.8f, -1.8f, 0.1f);
 		sphereObject1->scale = vec3(0.1f, 0.1f, 0.1f);
-		balls.push_back(sphereObject1);
+		//balls.push_back(sphereObject1);
 		nextBall = sphereObject1;
 
 		plainObject = new Object(phongShader, material0, texture15x20, plain);
@@ -640,14 +646,18 @@ public:
 		}
 		else {
 			projectiveCamera->wEye = currentBall->translation + normalize(currentBall->velocity)* (0.1f+epsilon);
-			projectiveCamera->wLookat = currentBall->velocity + currentBall->translation;
+			//printf("render: %lf %lf %lf\n", currentBall->velocity.x, currentBall->velocity.y, currentBall->velocity.z);
+			//printf("render: %lf %lf %lf\n", projectiveCamera->wEye.x, projectiveCamera->wEye.y, projectiveCamera->wEye.z);
+			projectiveCamera->wLookat = currentBall->translation + currentBall->velocity;
+			//projectiveCamera->wVup = cross(-currentBall->velocity, vec3(-currentBall->velocity.y, -currentBall->velocity.x, -currentBall->velocity.z));
 			state.wEye = projectiveCamera->wEye;
 			state.V = projectiveCamera->V();
 			state.P = projectiveCamera->P();
 		}
 		state.lights = lights;
 		plainObject->Draw(state);
-		for (Object* obj : balls) obj->Draw(state);
+		nextBall->Draw(state);
+		for (Object* obj : balls) { if (obj->valid)obj->Draw(state); }
 	}
 
 	void Animate(float tstart, float tend) {
@@ -697,24 +707,25 @@ void onMouse(int button, int state, int pX, int pY) {
 	material0->ks = vec3(4, 4, 4);
 	material0->ka = vec3(0.1f, 0.1f, 0.1f);
 	material0->shininess = 10;
+	static float holeDepth = 0.05f;
 	
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
 		scene.nextBall->velocity = vec3((cX+1.0f)/2.0f*1.5f, (cY + 1.0f) / 2.0f * 1.0f, 0.0f);
 		scene.currentBall = scene.nextBall;
-		scene.currentBall->valid = true;
+		scene.balls.push_back(scene.nextBall);
 
 		Object* sphereObject = new Object(new PhongShader(), material0, new SimpleTexture(), new Sphere());
 		sphereObject->translation = vec3(-1.8f, -1.8f, 0.1f);
 		sphereObject->scale = vec3(0.1f, 0.1f, 0.1f);
-		scene.balls.push_back(sphereObject);
+		//scene.balls.push_back(sphereObject);
 		scene.nextBall = sphereObject;
 	}
 	else if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
-		holes.push_back(new Hole(0.05, vec2(cX, cY)));
+		holes.push_back(new Hole(holeDepth, vec2(cX, cY)));
+		holeDepth += 0.01;
 		
 		scene.plainObject= new Object(new PhongShader(), material0, new CheckerBoardTexture(15, 20), new RubberPlain());
 		scene.plainObject->scale = vec3(2, 2, 1);
-		scene.plainObject->valid = true;
 
 			
 	}
@@ -728,7 +739,7 @@ void onMouseMotion(int pX, int pY) {
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	static float tend = 0;
-	const float dt = 0.1f; // dt is ”infinitesimal”
+	const float dt = 0.01f; // dt is ”infinitesimal”
 	float tstart = tend;
 	tend = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
 
