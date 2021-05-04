@@ -73,7 +73,7 @@ template<class T> Dnum<T> Pow(Dnum<T> g, float n) {
 
 typedef Dnum<vec2> Dnum2;
 
-const int tessellationLevel = 20;
+const int tessellationLevel = 100;
 
 //---------------------------
 struct Camera { // 3D camera
@@ -108,9 +108,9 @@ struct OrtographicCamera : Camera{
 
 public:
 	mat4 P() { // projection matrix
-		return mat4(1.0f , 0, 0, 0,
-					0, 1.0f, 0, 0,
-					0, 0, -2.0f / (bp - fp), -1.0f*(bp+fp)/(bp-fp),
+		return mat4(0.5f , 0, 0, 0,
+					0, 0.5f, 0, 0,
+					0, 0, -2.0f / (bp - fp), 0,//-1.0f*(bp+fp)/(bp-fp)
 					0, 0, 0, 1);
 	}
 };
@@ -146,7 +146,6 @@ struct Light {
 public: 
 	void Animate(float tstart, float tend) {
 		float dt = tend;
-		//rotationAxis = rotationAxis / length(rotationAxis);
 		
 			vec4 q = vec4(cosf(dt / 4.0f),
 				sinf(dt / 4.0f) * cosf(dt) / 2.0f ,
@@ -157,22 +156,15 @@ public:
 				-1 * sinf(dt / 4.0f) * cosf(dt) / 2.0f,
 				-1 * sinf(dt / 4.0f) * sinf(dt) / 2.0f,
 				sinf(dt / 4.0f)* sqrtf(3.0f / 4.0f));
-				
-
-		//vec4 rot = vec4(rotationAxis.x, rotationAxis.y, rotationAxis.z, 0);
-		//wLightPos = wLightPos - rot;
-		//wLightPos = wLightPos - rotationAxis;
+			
 
 		q = q/length(q);
 		qinv = qinv / length(qinv);
-		printf("1: %lf  %lf  %lf\n", wLightPos.x, wLightPos.y, wLightPos.z);
 		wLightPos = quaternionMultiply(q, originalPos - rotationAxis);
 
-		printf("2: %lf\n", wLightPos.x);
 		wLightPos = quaternionMultiply(wLightPos, qinv);
 
 		wLightPos = wLightPos + rotationAxis;
-		printf("3: %lf\n", wLightPos.x);
 		
 	}
 };
@@ -426,8 +418,21 @@ public:
 	}
 };
 
+class Hole {
+public:
+	float weight;
+	vec2 pos;
+	Hole(float w, vec2 p) : weight(w), pos(p) {
+	}
+};
+
+std::vector<Hole*> holes;
+
+
 class RubberPlain : public ParamSurface {
 public:
+	
+
 	RubberPlain() { create(); }
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
 		U = U * 2 - 1;
@@ -435,6 +440,10 @@ public:
 		X = U;
 		Y = V;
 		Z = 0;
+
+		for (size_t i = 0; i < holes.size(); i++) {
+			Z.f -= holes[i]->weight / (sqrtf(pow(X.f - holes[i]->pos.x, 2) + pow(Y.f - holes[i]->pos.y, 2)) + 4.0f * 0.05f);
+		}
 	}
 
 };
@@ -446,12 +455,12 @@ struct Object {
 	Shader* shader;
 	Material* material;
 	Texture* texture;
-	Geometry* geometry;
+	ParamSurface* geometry;
 	vec3 scale, translation, rotationAxis;
 	float rotationAngle;
 public:
 	vec3 velocity=vec3(0,0,0);
-	Object(Shader* _shader, Material* _material, Texture* _texture, Geometry* _geometry) :
+	Object(Shader* _shader, Material* _material, Texture* _texture, ParamSurface* _geometry) :
 		scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), rotationAxis(0, 0, 1), rotationAngle(0) {
 		shader = _shader;
 		texture = _texture;
@@ -508,10 +517,10 @@ class Scene {
 	OrtographicCamera* ortographicCamera = new OrtographicCamera();
 public:
 	View view = ortographic;
-	std::vector<Object*> objects;
+	std::vector<Object*> balls;
 	Object* currentBall;
 	Object* nextBall;
-	
+	Object* plainObject;
 	
 	void Build() {	
 		// Materials
@@ -534,20 +543,20 @@ public:
 		Texture* texture15x20 = new CheckerBoardTexture(15, 20);
 
 		// Geometries
-		Geometry* sphere = new Sphere();
-		Geometry* plain = new RubberPlain();
+		ParamSurface* sphere = new Sphere();
+		ParamSurface* plain = new RubberPlain();
 
 		// Create objects by setting up their vertex data on the GPU
 		Object* sphereObject1 = new Object(phongShader, material0, new SimpleTexture(), sphere);
 		sphereObject1->translation = vec3(-1.8f, -1.8f, 0.1f);
 		sphereObject1->scale = vec3(0.1f, 0.1f, 0.1f);
-		objects.push_back(sphereObject1);
+		balls.push_back(sphereObject1);
 		nextBall = sphereObject1;
 
-		Object* plainObject = new Object(phongShader, material0, texture15x20, plain);
+		plainObject = new Object(phongShader, material0, texture15x20, plain);
 		//plainObject->translation = vec3(-9, 3, 0);
 		plainObject->scale = vec3(2, 2, 1);
-		objects.push_back(plainObject);
+		//objects.push_back(plainObject);
 
 
 		
@@ -594,11 +603,13 @@ public:
 			state.P = projectiveCamera->P();
 		}
 		state.lights = lights;
-		for (Object* obj : objects) obj->Draw(state);
+		plainObject->Draw(state);
+		for (Object* obj : balls) obj->Draw(state);
 	}
 
 	void Animate(float tstart, float tend) {
-		for (Object* obj : objects) obj->Animate(tstart, tend);
+		plainObject->Animate(tstart, tend);
+		for (Object* obj : balls) obj->Animate(tstart, tend);
 		for (Light* light : lights) light->Animate(tstart, tend);
 	}
 };
@@ -638,21 +649,29 @@ void onKeyboardUp(unsigned char key, int pX, int pY) { }
 void onMouse(int button, int state, int pX, int pY) { 
 	float cX = 2.0f * pX / windowWidth - 1;
 	float cY = 1.0f - 2.0f * pY / windowHeight;
+	Material* material0 = new Material;
+	material0->kd = vec3(0.6f, 0.4f, 0.2f);
+	material0->ks = vec3(4, 4, 4);
+	material0->ka = vec3(0.1f, 0.1f, 0.1f);
+	material0->shininess = 10;
 	
-	if (button==GLUT_LEFT_BUTTON && state==GLUT_DOWN) {
+	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
 		scene.nextBall->velocity = vec3((cX+1.0f)/2.0f*1.5f, (cY + 1.0f) / 2.0f * 1.5f, 0.0f);
 		scene.currentBall = scene.nextBall;
 
-		Material* material0 = new Material;
-		material0->kd = vec3(0.6f, 0.4f, 0.2f);
-		material0->ks = vec3(4, 4, 4);
-		material0->ka = vec3(0.1f, 0.1f, 0.1f);
-		material0->shininess = 10;
 		Object* sphereObject = new Object(new PhongShader(), material0, new SimpleTexture(), new Sphere());
 		sphereObject->translation = vec3(-1.8f, -1.8f, 0.1f);
 		sphereObject->scale = vec3(0.1f, 0.1f, 0.1f);
-		scene.objects.push_back(sphereObject);
+		scene.balls.push_back(sphereObject);
 		scene.nextBall = sphereObject;
+	}
+	else if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
+		holes.push_back(new Hole(0.1, vec2(cX, cY)));
+		
+		scene.plainObject= new Object(new PhongShader(), material0, new CheckerBoardTexture(15, 20), new RubberPlain());
+		scene.plainObject->scale = vec3(2, 2, 1);
+
+			
 	}
 	
 }
