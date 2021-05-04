@@ -110,7 +110,7 @@ public:
 	mat4 P() { // projection matrix
 		return mat4(0.5f , 0, 0, 0,
 					0, 0.5f, 0, 0,
-					0, 0, -2.0f / (bp - fp), 0,//-1.0f*(bp+fp)/(bp-fp)
+					0, 0, -2.0f / (bp - fp), 0,//-1.0f*(bp+fp)/(bp-fp),
 					0, 0, 0, 1);
 	}
 };
@@ -442,7 +442,9 @@ public:
 		Z = 0;
 
 		for (size_t i = 0; i < holes.size(); i++) {
-			Z.f -= holes[i]->weight / (sqrtf(pow(X.f - holes[i]->pos.x, 2) + pow(Y.f - holes[i]->pos.y, 2)) + 4.0f * 0.05f);
+			Dnum2 Hole = Pow((Pow(Pow(X - holes[i]->pos.x, 2) + Pow(Y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.05f), -1.0f);
+			Hole.f *= holes[i]->weight;
+			Z = Z - Hole;
 		}
 	}
 
@@ -459,6 +461,7 @@ struct Object {
 	vec3 scale, translation, rotationAxis;
 	float rotationAngle;
 public:
+	bool valid = false;
 	vec3 velocity=vec3(0,0,0);
 	Object(Shader* _shader, Material* _material, Texture* _texture, ParamSurface* _geometry) :
 		scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), rotationAxis(0, 0, 1), rotationAngle(0) {
@@ -487,19 +490,59 @@ public:
 
 	virtual void Animate(float tstart, float tend) { 
 		rotationAngle = 0.0f * tend; 
-		translation = translation + velocity * (tend - tstart);
-		if (abs(translation.x) > 2) {
-			float dx = abs(translation.x) - 2;
-			translation.x = translation.x * -1;
-			if (translation.x < -2) translation.x += dx;
-			else translation.x += dx;
-			
-		}
-		if (abs(translation.y) > 2) {		
-			float dy = abs(translation.y) - 2;
-			translation.y = translation.y * -1;
-			if (translation.y < -2) translation.y += dy;
-			else translation.y += dy;
+		if (valid) {
+			float dt = tend - tstart;
+			float z = 0;
+			for (size_t i = 0; i < holes.size(); i++) {
+				z -= holes[i]->weight * powf((powf(powf(translation.x - holes[i]->pos.x, 2) + powf(translation.y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.05f), -1.0f);
+			}
+
+			//-(k (-h + x))/((-h + x)^2 + (-j + y)^2)^(3/2)
+			//-(k (-j + y))/((-h + x)^2 + (-j + y)^2)^(3/2)
+
+			//vec3 normal = vec3(-(holes[i]->weight * (-)));
+			vec3 normal = vec3(0, 0, 1);
+			for (size_t i = 0; i < holes.size(); i++) {
+				normal.x -= -1 * (holes[i]->weight * (-holes[i]->pos.x + translation.x)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+				normal.y -= -1 * (holes[i]->weight * (-holes[i]->pos.y + translation.y)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+			}
+			normal.x = -1 * normal.x;
+			normal.y = -1 * normal.y;
+			normal = normalize(normal);
+			vec3 g = vec3(0, 0, -0.000001);
+			vec3 a = g * normal;
+			vec3 perpendicular = a * normal;
+			vec3 parallel = g - perpendicular;
+			velocity = velocity + parallel * dt;
+			translation.z = z;
+
+			translation = translation + velocity * (dt) ;
+
+			normal = vec3(0, 0, 1);
+			for (size_t i = 0; i < holes.size(); i++) {
+				normal.x -= -1 * (holes[i]->weight * (-holes[i]->pos.x + translation.x)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+				normal.y -= -1 * (holes[i]->weight * (-holes[i]->pos.y + translation.y)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+			}
+			normal.x = -1 * normal.x;
+			normal.y = -1 * normal.y;
+
+			translation = translation + normal * 0.1f;
+
+			if (abs(translation.x) > 2) {
+				float dx = abs(translation.x) - 2;
+				translation.x = translation.x * -1;
+				if (translation.x < -2) translation.x += dx;
+				else translation.x += dx;
+
+			}
+			if (abs(translation.y) > 2) {
+				float dy = abs(translation.y) - 2;
+				translation.y = translation.y * -1;
+				if (translation.y < -2) translation.y += dy;
+				else translation.y += dy;
+			}
+
+			if (translation.z < -1) valid = false;
 		}
 	}
 };
@@ -556,7 +599,7 @@ public:
 		plainObject = new Object(phongShader, material0, texture15x20, plain);
 		//plainObject->translation = vec3(-9, 3, 0);
 		plainObject->scale = vec3(2, 2, 1);
-		//objects.push_back(plainObject);
+		plainObject->valid = true;
 
 
 		
@@ -608,7 +651,7 @@ public:
 	}
 
 	void Animate(float tstart, float tend) {
-		plainObject->Animate(tstart, tend);
+		//plainObject->Animate(tstart, tend);
 		for (Object* obj : balls) obj->Animate(tstart, tend);
 		for (Light* light : lights) light->Animate(tstart, tend);
 	}
@@ -656,8 +699,9 @@ void onMouse(int button, int state, int pX, int pY) {
 	material0->shininess = 10;
 	
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
-		scene.nextBall->velocity = vec3((cX+1.0f)/2.0f*1.5f, (cY + 1.0f) / 2.0f * 1.5f, 0.0f);
+		scene.nextBall->velocity = vec3((cX+1.0f)/2.0f*1.5f, (cY + 1.0f) / 2.0f * 1.0f, 0.0f);
 		scene.currentBall = scene.nextBall;
+		scene.currentBall->valid = true;
 
 		Object* sphereObject = new Object(new PhongShader(), material0, new SimpleTexture(), new Sphere());
 		sphereObject->translation = vec3(-1.8f, -1.8f, 0.1f);
@@ -666,10 +710,11 @@ void onMouse(int button, int state, int pX, int pY) {
 		scene.nextBall = sphereObject;
 	}
 	else if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
-		holes.push_back(new Hole(0.1, vec2(cX, cY)));
+		holes.push_back(new Hole(0.05, vec2(cX, cY)));
 		
 		scene.plainObject= new Object(new PhongShader(), material0, new CheckerBoardTexture(15, 20), new RubberPlain());
 		scene.plainObject->scale = vec3(2, 2, 1);
+		scene.plainObject->valid = true;
 
 			
 	}
