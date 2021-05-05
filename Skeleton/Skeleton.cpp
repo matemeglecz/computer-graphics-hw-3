@@ -30,23 +30,12 @@
 // negativ elojellel szamoljak el es ezzel parhuzamosan eljaras is indul velem szemben.
 //=============================================================================================
 
-
-//=============================================================================================
-// Computer Graphics Sample Program: 3D engine-let
-// Shader: Gouraud, Phong, NPR
-// Material: diffuse + Phong-Blinn
-// Texture: CPU-procedural
-// Geometry: sphere, tractricoid, torus, mobius, klein-bottle, boy, dini
-// Camera: perspective
-// Light: point or directional sources
-//=============================================================================================
 #include "framework.h"
 
-//---------------------------
-template<class T> struct Dnum { // Dual numbers for automatic derivation
-//---------------------------
-	float f; // function value
-	T d;  // derivatives
+template<class T> struct Dnum { 
+
+	float f; 
+	T d; 
 	Dnum(float f0 = 0, T d0 = T(0)) { f = f0, d = d0; }
 	Dnum operator+(Dnum r) { return Dnum(f + r.f, d + r.d); }
 	Dnum operator-(Dnum r) { return Dnum(f - r.f, d - r.d); }
@@ -58,7 +47,6 @@ template<class T> struct Dnum { // Dual numbers for automatic derivation
 	}
 };
 
-// Elementary functions prepared for the chain rule as well
 template<class T> Dnum<T> Exp(Dnum<T> g) { return Dnum<T>(expf(g.f), expf(g.f) * g.d); }
 template<class T> Dnum<T> Sin(Dnum<T> g) { return  Dnum<T>(sinf(g.f), cosf(g.f) * g.d); }
 template<class T> Dnum<T> Cos(Dnum<T>  g) { return  Dnum<T>(cosf(g.f), -sinf(g.f) * g.d); }
@@ -75,18 +63,16 @@ typedef Dnum<vec2> Dnum2;
 
 const int tessellationLevel = 100;
 
-//---------------------------
-struct Camera { // 3D camera
-//---------------------------
-	vec3 wEye, wLookat, wVup;   // extrinsic
-	float fov, asp, fp, bp;		// intrinsic
+struct Camera { 
+	vec3 wEye, wLookat, wVup;   
+	float fov, asp, fp, bp;		
 public:
 	Camera() {
 		asp = (float)windowWidth / windowHeight;
 		fov = 75.0f * (float)M_PI / 180.0f;
 		fp = 0.001; bp = 100;
 	}
-	mat4 V() { // view matrix: translates the center to the origin
+	mat4 V() { 
 		vec3 w = normalize(wEye - wLookat);
 		vec3 u = normalize(cross(wVup, w));
 		vec3 v = cross(w, u);
@@ -96,7 +82,7 @@ public:
 													0, 0, 0, 1);
 	}
 
-	virtual mat4 P() { // projection matrix
+	virtual mat4 P() { 
 		return mat4(1 / (tan(fov / 2) * asp), 0, 0, 0,
 					0, 1 / tan(fov / 2), 0, 0,
 					0, 0, -(fp + bp) / (bp - fp), -1,
@@ -107,19 +93,16 @@ public:
 struct OrtographicCamera : Camera{ 
 
 public:
-	mat4 P() { // projection matrix
+	mat4 P() { 
 		return mat4(0.5f , 0, 0, 0,
 					0, 0.5f, 0, 0,
-					0, 0, -2.0f / (bp - fp), 0,//-1.0f*(bp+fp)/(bp-fp),
-					0, 0, 0, 1);
+					0, 0, -2.0f / (bp - fp), 0,
+					0, 0, -1.0f * (bp + fp) / (bp - fp), 1);
 	}
 };
 
 
-
-//---------------------------
 struct Material {
-	//---------------------------
 	vec3 kd, ks, ka;
 	float shininess;
 	Material() {};
@@ -136,12 +119,10 @@ vec4 quaternionMultiply(vec4 q1, vec4 q2) {
 
 float length(const vec4& v) { return sqrtf(dot(v, v)); }
 
-//---------------------------
 struct Light {
-	//---------------------------
 	vec3 La, Le;
 	vec4 originalPos;
-	vec4 wLightPos; // homogeneous coordinates, can be at ideal point
+	vec4 wLightPos; 
 	vec4 rotationAxis;
 public: 
 	void Animate(float tstart, float tend) {
@@ -157,49 +138,25 @@ public:
 				-1 * sinf(dt / 4.0f) * sinf(dt) / 2.0f,
 				sinf(dt / 4.0f)* sqrtf(3.0f / 4.0f));
 			
-
 		q = q/length(q);
 		qinv = qinv / length(qinv);
 		wLightPos = quaternionMultiply(q, originalPos - rotationAxis);
-
 		wLightPos = quaternionMultiply(wLightPos, qinv);
-
 		wLightPos = wLightPos + rotationAxis;
-		
-	}
-};
-
-//---------------------------
-class CheckerBoardTexture : public Texture {
-	//---------------------------
-public:
-	CheckerBoardTexture(const int width, const int height) : Texture() {
-		std::vector<vec4> image(width * height);
-		const vec4 yellow(1, 1, 0, 1), blue(0, 0, 1, 1);
-		for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-			image[y * width + x] = (x & 1) ^ (y & 1) ? yellow : blue;
-		}
-		create(width, height, image, GL_NEAREST);
 	}
 };
 
 class SimpleTexture : public Texture {
 public:
-	SimpleTexture() : Texture() {
+	SimpleTexture(float r= (float)std::rand() / RAND_MAX, float g= (float)std::rand() / RAND_MAX, float b= (float)std::rand() / RAND_MAX) : Texture() {
 		std::vector<vec4> image(1);
-		
-		float r = (float)std::rand() / RAND_MAX ;
-		float g = (float)std::rand() / RAND_MAX ;
-		float b = (float)std::rand() / RAND_MAX ;
 
 		image[0] = vec4(r, g, b, 1);
 		create(1, 1, image, GL_NEAREST);
 	}
 };
 
-//---------------------------
 struct RenderState {
-	//---------------------------
 	mat4	           MVP, M, Minv, V, P;
 	Material* material;
 	std::vector<Light*> lights;
@@ -208,9 +165,7 @@ struct RenderState {
 	int plain=0;
 };
 
-//---------------------------
 class Shader : public GPUProgram {
-	//---------------------------
 public:
 	virtual void Bind(RenderState state) = 0;
 
@@ -228,10 +183,7 @@ public:
 	}
 };
 
-
-//---------------------------
 class PhongShader : public Shader {
-	//---------------------------
 	const char* vertexSource = R"(
 		#version 330
 		precision highp float;
@@ -270,7 +222,6 @@ class PhongShader : public Shader {
 		}
 	)";
 
-	// fragment shader in GLSL
 	const char* fragmentSource = R"(
 		#version 330
 		precision highp float;
@@ -308,14 +259,14 @@ class PhongShader : public Shader {
 
 			vec3 texColor = texture(diffuseTexture, texcoord).rgb;
 
-			if(plain==1 && z<-0.16f) {
-				int x=int(z/-0.16f);
-				depth=x*2 ;
+			if(plain==1 && z<-0.2f) {
+				int x=int(z/-0.1f);
+				depth=x*0.6 ;
 			}
 
 			vec3 ka = (material.ka / depth ) * texColor;
 			vec3 kd = (material.kd / depth ) * texColor;
-			vec3 ks = (material.ks ) ; //+ depth*vec3(0.1f, 0.1f, 0.1f)
+			vec3 ks = (material.ks ) ; 
 			
 			vec3 radiance = vec3(0, 0, 0);
 			for(int i = 0; i < nLights; i++) {
@@ -334,7 +285,7 @@ public:
 	PhongShader() { create(vertexSource, fragmentSource, "fragmentColor"); }
 
 	void Bind(RenderState state) {
-		Use(); 		// make this program run
+		Use(); 		
 		setUniform(state.MVP, "MVP");
 		setUniform(state.M, "M");
 		setUniform(state.Minv, "Minv");
@@ -351,16 +302,14 @@ public:
 };
 
 
-//---------------------------
 class Geometry {
-	//---------------------------
 protected:
-	unsigned int vao, vbo;        // vertex array object
+	unsigned int vao, vbo;        
 public:
 	Geometry() {
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
-		glGenBuffers(1, &vbo); // Generate 1 vertex buffer object
+		glGenBuffers(1, &vbo); 
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	}
 	virtual void Draw() = 0;
@@ -370,9 +319,7 @@ public:
 	}
 };
 
-//---------------------------
 class ParamSurface : public Geometry {
-	//---------------------------
 	struct VertexData {
 		vec3 position, normal;
 		vec2 texcoord;
@@ -399,7 +346,7 @@ public:
 	void create(int N = tessellationLevel, int M = tessellationLevel) {
 		nVtxPerStrip = (M + 1) * 2;
 		nStrips = N;
-		std::vector<VertexData> vtxData;	// vertices on the CPU
+		std::vector<VertexData> vtxData;	
 		for (int i = 0; i < N; i++) {
 			for (int j = 0; j <= M; j++) {
 				vtxData.push_back(GenVertexData((float)j / M, (float)i / N));
@@ -407,11 +354,9 @@ public:
 			}
 		}
 		glBufferData(GL_ARRAY_BUFFER, nVtxPerStrip * nStrips * sizeof(VertexData), &vtxData[0], GL_STATIC_DRAW);
-		// Enable the vertex attribute arrays
-		glEnableVertexAttribArray(0);  // attribute array 0 = POSITION
-		glEnableVertexAttribArray(1);  // attribute array 1 = NORMAL
-		glEnableVertexAttribArray(2);  // attribute array 2 = TEXCOORD0
-		// attribute array, components/attribute, component type, normalize?, stride, offset
+		glEnableVertexAttribArray(0);  
+		glEnableVertexAttribArray(1);  
+		glEnableVertexAttribArray(2); 
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, position));
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, normal));
 		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, texcoord));
@@ -423,9 +368,7 @@ public:
 	}
 };
 
-//---------------------------
 class Sphere : public ParamSurface {
-	//---------------------------
 public:
 	Sphere() { create(); }
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
@@ -458,25 +401,24 @@ public:
 		Z = 0;
 
 		for (size_t i = 0; i < holes.size(); i++) {
-			Dnum2 Hole = Pow((Pow(Pow(X - holes[i]->pos.x, 2) + Pow(Y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.005f), -1.0f);
-			Hole.f *= holes[i]->weight;
+			Dnum2 HoleX = Dnum2(holes[i]->pos.x, vec2(1, 0));
+			Dnum2 HoleY = Dnum2(holes[i]->pos.y, vec2(0, 1));
+			Dnum2 Hole = Pow((Pow(Pow(X - HoleX, 2) + Pow(Y - HoleY, 2), 0.5f) + 4.0f * 0.005f), -1.0f);
+			Hole = Hole * holes[i]->weight;
 			Z = Z - Hole;
-			if (Z.f < -2) Z.f = -2;
 		}
 	}
 
 };
 
-
-//---------------------------
 struct Object {
-	//---------------------------
 	Shader* shader;
 	Material* material;
 	Texture* texture;
 	ParamSurface* geometry;
 	vec3 scale, translation, rotationAxis;
 	float rotationAngle;
+	vec3 realCoordinate= vec3(0,0,0);
 public:
 	bool valid = true;
 	vec3 velocity=vec3(0,0,0);
@@ -506,17 +448,13 @@ public:
 	}
 
 	virtual void Animate(float tstart, float tend) { 
-		rotationAngle = 0.0f * tend; 
 		if (valid) {
 			float dt = tend - tstart;
-			
-			//-(k (-h + x))/((-h + x)^2 + (-j + y)^2)^(3/2)
-			//-(k (-j + y))/((-h + x)^2 + (-j + y)^2)^(3/2)
 
 			vec3 normal = vec3(0, 0, 1);
 			for (size_t i = 0; i < holes.size(); i++) {
-				normal.x = -1 * (holes[i]->weight * (-holes[i]->pos.x + translation.x)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
-				normal.y = -1 * (holes[i]->weight * (-holes[i]->pos.y + translation.y)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+				normal.x = -1 * (holes[i]->weight * (-holes[i]->pos.x + realCoordinate.x)) / powf(powf(-holes[i]->pos.x + realCoordinate.x, 2) + powf(-holes[i]->pos.y + realCoordinate.y, 2), 1.5f);
+				normal.y = -1 * (holes[i]->weight * (-holes[i]->pos.y + realCoordinate.y)) / powf(powf(-holes[i]->pos.x + realCoordinate.x, 2) + powf(-holes[i]->pos.y + realCoordinate.y, 2), 1.5f);
 			}
 			
 			normal = normalize(normal);
@@ -524,49 +462,45 @@ public:
 			float a = dot(g, normal);
 			vec3 perpendicular = a * normal;
 			vec3 parallel = g - perpendicular;
-			//printf("anim: %lf %lf %lf\n", parallel.x, parallel.y, parallel.z);
 			velocity = velocity + parallel * dt;
-			//printf("anim: %lf %lf %lf\n", velocity.x, velocity.y, velocity.z);
-			
+			if (dot(velocity, vec3(0, 0, -1)) > 0.7f*length(velocity)) {
+				valid = false;
+			}
 
-			translation = translation + velocity * (dt) ;
+			realCoordinate = realCoordinate + velocity * (dt) ;
 			float z = 0;
 			for (size_t i = 0; i < holes.size(); i++) {
-				z -= holes[i]->weight * powf((powf(powf(translation.x - holes[i]->pos.x, 2) + powf(translation.y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.005f), -1.0f);
-				if (length(holes[i]->pos - vec2(translation.x, translation.y)) < 0.1f) { 
-					valid = false; 
-					printf("%d\n", i);
+				z -= holes[i]->weight * powf((powf(powf(realCoordinate.x - holes[i]->pos.x, 2) + powf(realCoordinate.y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.005f), -1.0f);
+				if (length(holes[i]->pos - vec2(realCoordinate.x, realCoordinate.y)) < 0.04f) {
+					valid = false;
 				}
 			}
-			//printf("%lf %lf %lf\n", translation.x, translation.y, translation.z);
-			//if (translation.z < -0.07f) valid = false;
-			
 
-			translation.z = 0.05;
+			if (abs(realCoordinate.x) > 2) {
+				float dx = abs(realCoordinate.x) - 2;
+				realCoordinate.x = realCoordinate.x * -1;
+				if (realCoordinate.x < -2) realCoordinate.x += dx;
+				else realCoordinate.x += dx;
+
+			}
+			if (abs(realCoordinate.y) > 2) {
+				float dy = abs(realCoordinate.y) - 2;
+				realCoordinate.y = realCoordinate.y * -1;
+				if (realCoordinate.y < -2) realCoordinate.y += dy;
+				else realCoordinate.y += dy;
+			}
+			
+			translation.x = realCoordinate.x;
+			translation.y = realCoordinate.y;
+			translation.z = z;
 			normal = vec3(0, 0, 1);
 			for (size_t i = 0; i < holes.size(); i++) {
-				normal.x = -1 * (holes[i]->weight * (-holes[i]->pos.x + translation.x)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
-				normal.y = -1 * (holes[i]->weight * (-holes[i]->pos.y + translation.y)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
+				normal.x = -1 * (holes[i]->weight * (-holes[i]->pos.x + realCoordinate.x)) / powf(powf(-holes[i]->pos.x + realCoordinate.x, 2) + powf(-holes[i]->pos.y + realCoordinate.y, 2), 1.5f);
+				normal.y = -1 * (holes[i]->weight * (-holes[i]->pos.y + realCoordinate.y)) / powf(powf(-holes[i]->pos.x + realCoordinate.x, 2) + powf(-holes[i]->pos.y + realCoordinate.y, 2), 1.5f);
 			}
-			//printf("%lf %lf %lf\n", normal.x, normal.y, normal.z);
 			normal = normalize(normal);
 			
-			//translation = translation +  * 0.05f;
-			
-			if (abs(translation.x) > 2) {
-				float dx = abs(translation.x) - 2;
-				translation.x = translation.x * -1;
-				if (translation.x < -2) translation.x += dx;
-				else translation.x += dx;
-
-			}
-			if (abs(translation.y) > 2) {
-				float dy = abs(translation.y) - 2;
-				translation.y = translation.y * -1;
-				if (translation.y < -2) translation.y += dy;
-				else translation.y += dy;
-			}
-			
+			translation = translation + normal * 0.08f;
 		}
 	}
 };
@@ -576,11 +510,10 @@ enum View{
 };
 
 float epsilon = 0.0001;
-//---------------------------
+
 class Scene {
-	//---------------------------
 	std::vector<Light*> lights;
-	Camera* projectiveCamera = new Camera(); // 3D camera
+	Camera* projectiveCamera = new Camera();
 	OrtographicCamera* ortographicCamera = new OrtographicCamera();
 public:
 	View view = ortographic;
@@ -590,69 +523,46 @@ public:
 	Object* plainObject;
 	
 	void Build() {	
-		// Materials
 		Shader* phongShader = new PhongShader();
 		Material* material0 = new Material;
-		material0->kd = vec3(0.6f, 0.4f, 0.2f);
+		material0->kd = vec3(0.4f, 0.4f, 0.4f);
 		material0->ks = vec3(4, 4, 4);
 		material0->ka = vec3(0.1f, 0.1f, 0.1f);
 		material0->shininess = 10;
-
-		Material* material1 = new Material;
-		material1->kd = vec3(0.8f, 0.6f, 0.4f);
-		material1->ks = vec3(0.3f, 0.3f, 0.3f);
-		material1->ka = vec3(0.2f, 0.2f, 0.2f);
-		material1->shininess = 30;
 		
-
-		// Textures
-		Texture* texture4x8 = new CheckerBoardTexture(4, 8);
-		Texture* texture15x20 = new CheckerBoardTexture(15, 20);
-
-		// Geometries
 		ParamSurface* sphere = new Sphere();
 		ParamSurface* plain = new RubberPlain();
 
-		// Create objects by setting up their vertex data on the GPU
 		Object* sphereObject1 = new Object(phongShader, material0, new SimpleTexture(), sphere);
-		sphereObject1->translation = vec3(-1.8f, -1.8f, 0.1f);
-		sphereObject1->scale = vec3(0.05f, 0.05f, 0.05f);
-		//balls.push_back(sphereObject1);
+		sphereObject1->translation = vec3(-1.8f, -1.8f, 0.08f);
+		sphereObject1->realCoordinate = vec3(-1.8f, -1.8f, 0.08f);
+		sphereObject1->scale = vec3(0.08f, 0.08f, 0.08f);
 		nextBall = sphereObject1;
 
-		plainObject = new Object(phongShader, material0, texture15x20, plain);
-		//plainObject->translation = vec3(-9, 3, 0);
+		plainObject = new Object(phongShader, material0, new SimpleTexture(0.4f, 0.4f, 0.9f), plain);
 		plainObject->scale = vec3(2, 2, 1);
 		plainObject->valid = true;
 
-
-		
-
-		// Camera
 		ortographicCamera->wEye = vec3(0, 0, 1);
 		ortographicCamera->wLookat = vec3(0, 0, 0);
 		ortographicCamera->wVup = vec3(0, 1, 0);
 
 		projectiveCamera->wVup = vec3(0, 0, 1);
 
-		// Lights
 		lights.resize(2);
 		lights[0] = new Light();
-		lights[0]->wLightPos = vec4(-3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
-		lights[0]->originalPos = vec4(-3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
+		lights[0]->wLightPos = vec4(-3.5f, 0, 1.0f, 1.0f);	
+		lights[0]->originalPos = vec4(-3.5f, 0, 1.0f, 1.0f);	
 		lights[0]->La = vec3(1.2f, 1.2f, 1.2f);
 		lights[0]->Le = vec3(3, 3, 3);
 		lights[0]->rotationAxis = vec4(3.5f, 0, 1.0f, 1.0f);
-		//lights[0]->rotationAxis = normalize(lights[0]->rotationAxis);
 		
 		lights[1] = new Light();
-		lights[1]->wLightPos = vec4(3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
-		lights[1]->originalPos = vec4(3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
+		lights[1]->wLightPos = vec4(3.5f, 0, 1.0f, 1.0f);	
+		lights[1]->originalPos = vec4(3.5f, 0, 1.0f, 1.0f);	
 		lights[1]->La = vec3(1.2f, 1.2f, 1.2f);
 		lights[1]->Le = vec3(3, 3, 3);
 		lights[1]->rotationAxis = vec4(-3.5f, 0, 1.0f, 1.0f);
-
-		
 	}
 
 	void Render() {
@@ -663,11 +573,25 @@ public:
 			state.P = ortographicCamera->P();
 		}
 		else {
-			projectiveCamera->wEye = currentBall->translation + normalize(currentBall->velocity)* (0.1f+epsilon);
-			//printf("render: %lf %lf %lf\n", currentBall->velocity.x, currentBall->velocity.y, currentBall->velocity.z);
-			//printf("render: %lf %lf %lf\n", projectiveCamera->wEye.x, projectiveCamera->wEye.y, projectiveCamera->wEye.z);
-			projectiveCamera->wLookat = currentBall->translation + currentBall->velocity;
-			//projectiveCamera->wVup = cross(-currentBall->velocity, vec3(-currentBall->velocity.y, -currentBall->velocity.x, -currentBall->velocity.z));
+			if (currentBall != nullptr && !currentBall->valid) {
+				for (Object* o : balls) {
+					if (o->valid) {
+						currentBall = o;
+						break;
+					}
+				}if(!currentBall->valid)
+					currentBall = nullptr;
+			}
+			if (currentBall == nullptr) {
+				projectiveCamera->wEye = nextBall->translation + normalize(vec3(1,1,0)) * (0.08f + epsilon);
+				projectiveCamera->wLookat = nextBall->translation + vec3(1, 1, 0);
+				projectiveCamera->wVup = vec3(0, 0, 1);
+			}
+			else {
+				projectiveCamera->wEye = currentBall->translation + normalize(currentBall->velocity) * (0.08f + epsilon);
+				projectiveCamera->wLookat = currentBall->translation + currentBall->velocity;
+				projectiveCamera->wVup = -cross(-currentBall->velocity, vec3(-currentBall->velocity.y, currentBall->velocity.x, currentBall->velocity.z));
+			}
 			state.wEye = projectiveCamera->wEye;
 			state.V = projectiveCamera->V();
 			state.P = projectiveCamera->P();
@@ -681,7 +605,6 @@ public:
 	}
 
 	void Animate(float tstart, float tend) {
-		//plainObject->Animate(tstart, tend);
 		for (Object* obj : balls) {
 			if (obj->valid) obj->Animate(tstart, tend);
 		}
@@ -691,7 +614,6 @@ public:
 
 Scene scene;
 
-// Initialization, create an OpenGL context
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
 	glEnable(GL_DEPTH_TEST);
@@ -699,33 +621,29 @@ void onInitialization() {
 	scene.Build();
 }
 
-// Window has become invalid: Redraw
 void onDisplay() {
-	glClearColor(0.5f, 0.5f, 0.8f, 1.0f);							// background color 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the screen
+	glClearColor(0.5f, 0.5f, 0.8f, 1.0f);							
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
 	scene.Render();
-	glutSwapBuffers();									// exchange the two buffers
+	glutSwapBuffers();									
 }
 
-// Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) { 
 	if (key == ' ') {
-		if (scene.view == ortographic && scene.currentBall!=nullptr) 
+		if (scene.view == ortographic) 
 			scene.view = projective;
 		else 
 			scene.view = ortographic;
 	}
 }
 
-// Key of ASCII code released
 void onKeyboardUp(unsigned char key, int pX, int pY) { }
 
-// Mouse click event
 void onMouse(int button, int state, int pX, int pY) { 
 	float cX = 2.0f * pX / windowWidth - 1;
 	float cY = 1.0f - 2.0f * pY / windowHeight;
 	Material* material0 = new Material;
-	material0->kd = vec3(0.6f, 0.4f, 0.2f);
+	material0->kd = vec3(0.4f, 0.4f, 0.4f);
 	material0->ks = vec3(4, 4, 4);
 	material0->ka = vec3(0.1f, 0.1f, 0.1f);
 	material0->shininess = 10;
@@ -733,20 +651,20 @@ void onMouse(int button, int state, int pX, int pY) {
 	
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
 		scene.nextBall->velocity = vec3((cX+1.0f)/2.0f*1.5f, (cY + 1.0f) / 2.0f * 1.0f, 0.0f);
-		scene.currentBall = scene.nextBall;
+		if(scene.currentBall==nullptr) scene.currentBall = scene.nextBall;
 		scene.balls.push_back(scene.nextBall);
 
 		Object* sphereObject = new Object(new PhongShader(), material0, new SimpleTexture(), new Sphere());
-		sphereObject->translation = vec3(-1.8f, -1.8f, 0.1f);
-		sphereObject->scale = vec3(0.05f, 0.05f, 0.05f);
-		//scene.balls.push_back(sphereObject);
+		sphereObject->translation = vec3(-1.8f, -1.8f, 0.08f);
+		sphereObject->realCoordinate = vec3(-1.8f, -1.8f, 0.08f);
+		sphereObject->scale = vec3(0.08f, 0.08f, 0.08f);
 		scene.nextBall = sphereObject;
 	}
 	else if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
 		holes.push_back(new Hole(holeDepth, vec2(cX, cY)));
 		holeDepth += 0.01f;
 		
-		scene.plainObject= new Object(new PhongShader(), material0, new CheckerBoardTexture(15, 20), new RubberPlain());
+		scene.plainObject= new Object(new PhongShader(), material0, new SimpleTexture(0.4f,0.4f,0.9f), new RubberPlain());
 		scene.plainObject->scale = vec3(2, 2, 1);
 
 			
@@ -754,14 +672,12 @@ void onMouse(int button, int state, int pX, int pY) {
 	
 }
 
-// Move mouse with key pressed
 void onMouseMotion(int pX, int pY) {
 }
 
-// Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	static float tend = 0;
-	const float dt = 0.01f; // dt is ”infinitesimal”
+	const float dt = 0.001f; 
 	float tstart = tend;
 	tend = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
 
