@@ -505,7 +505,7 @@ public:
 			}
 			
 			normal = normalize(normal);
-			vec3 g = vec3(0, 0, -5);
+			vec3 g = vec3(0, 0, -1);
 			float a = dot(g, normal);
 			vec3 perpendicular = a * normal;
 			vec3 parallel = g - perpendicular;
@@ -518,7 +518,7 @@ public:
 			float z = 0;
 			for (size_t i = 0; i < holes.size(); i++) {
 				z -= holes[i]->weight * powf((powf(powf(translation.x - holes[i]->pos.x, 2) + powf(translation.y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.05f), -1.0f);
-				if (length(holes[i]->pos - vec2(translation.x, translation.y))  < 0.2f) valid = false; 
+				if (length(holes[i]->pos - vec2(translation.x, translation.y))  < 0.14f) valid = false; 
 			}
 			//printf("%lf %lf %lf\n", translation.x, translation.y, translation.z);
 			//if (translation.z < -0.07f) valid = false;
