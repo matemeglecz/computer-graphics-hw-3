@@ -584,8 +584,8 @@ public:
 			}
 			if (currentBall == nullptr) {
 				projectiveCamera->wEye = nextBall->translation + normalize(vec3(1,1,0)) * (0.08f + epsilon);
-				projectiveCamera->wLookat = nextBall->translation + vec3(1, 1, 0);
-				projectiveCamera->wVup = vec3(0, 0, 1);
+				projectiveCamera->wLookat = nextBall->translation + vec3(1.0f, 1.0f, 0.0f);
+				projectiveCamera->wVup = vec3(0.0f, 0.0f, 1.0f);
 			}
 			else {
 				projectiveCamera->wEye = currentBall->translation + normalize(currentBall->velocity) * (0.08f + epsilon);
@@ -650,7 +650,7 @@ void onMouse(int button, int state, int pX, int pY) {
 	static float holeDepth = 0.05f;
 	
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
-		scene.nextBall->velocity = vec3((cX+1.0f)/2.0f*1.5f, (cY + 1.0f) / 2.0f * 1.0f, 0.0f);
+		scene.nextBall->velocity = vec3((cX+1.0f)/2.0f*1.5f, (cY + 1.0f) / 2.0f * 1.5f, 0.0f);
 		if(scene.currentBall==nullptr) scene.currentBall = scene.nextBall;
 		scene.balls.push_back(scene.nextBall);
 
