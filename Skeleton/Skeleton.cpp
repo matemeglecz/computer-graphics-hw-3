@@ -205,6 +205,7 @@ struct RenderState {
 	std::vector<Light*> lights;
 	Texture* texture;
 	vec3	           wEye;
+	int plain=0;
 };
 
 //---------------------------
@@ -253,6 +254,7 @@ class PhongShader : public Shader {
 		out vec3 wView;             // view in world space
 		out vec3 wLight[8];		    // light dir in world space
 		out vec2 texcoord;
+		out float z;
 
 		void main() {
 			gl_Position = vec4(vtxPos, 1) * MVP; // to NDC
@@ -264,6 +266,7 @@ class PhongShader : public Shader {
 		    wView  = wEye * wPos.w - wPos.xyz;
 		    wNormal = (Minv * vec4(vtxNorm, 0)).xyz;
 		    texcoord = vtxUV;
+			z=vtxPos.z;
 		}
 	)";
 
@@ -286,11 +289,13 @@ class PhongShader : public Shader {
 		uniform Light[8] lights;    // light sources 
 		uniform int   nLights;
 		uniform sampler2D diffuseTexture;
+		uniform int plain;
 
 		in  vec3 wNormal;       // interpolated world sp normal
 		in  vec3 wView;         // interpolated world sp view
 		in  vec3 wLight[8];     // interpolated world sp illum dir
 		in  vec2 texcoord;
+		in  float z;
 		
         out vec4 fragmentColor; // output goes to frame buffer
 
@@ -298,10 +303,20 @@ class PhongShader : public Shader {
 			vec3 N = normalize(wNormal);
 			vec3 V = normalize(wView); 
 			if (dot(N, V) < 0) N = -N;	// prepare for one-sided surfaces like Mobius or Klein
-			vec3 texColor = texture(diffuseTexture, texcoord).rgb;
-			vec3 ka = material.ka * texColor;
-			vec3 kd = material.kd * texColor;
+			float depth=1.0f;
+			
 
+			vec3 texColor = texture(diffuseTexture, texcoord).rgb;
+
+			if(plain==1 && z<-0.16f) {
+				int x=int(z/-0.16f);
+				depth=x*2 ;
+			}
+
+			vec3 ka = (material.ka / depth ) * texColor;
+			vec3 kd = (material.kd / depth ) * texColor;
+			vec3 ks = (material.ks ) ; //+ depth*vec3(0.1f, 0.1f, 0.1f)
+			
 			vec3 radiance = vec3(0, 0, 0);
 			for(int i = 0; i < nLights; i++) {
 				vec3 L = normalize(wLight[i]);
@@ -326,6 +341,7 @@ public:
 		setUniform(state.wEye, "wEye");
 		setUniform(*state.texture, std::string("diffuseTexture"));
 		setUniformMaterial(*state.material, "material");
+		setUniform(state.plain, "plain");
 
 		setUniform((int)state.lights.size(), "nLights");
 		for (unsigned int i = 0; i < state.lights.size(); i++) {
@@ -442,7 +458,7 @@ public:
 		Z = 0;
 
 		for (size_t i = 0; i < holes.size(); i++) {
-			Dnum2 Hole = Pow((Pow(Pow(X - holes[i]->pos.x, 2) + Pow(Y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.05f), -1.0f);
+			Dnum2 Hole = Pow((Pow(Pow(X - holes[i]->pos.x, 2) + Pow(Y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.005f), -1.0f);
 			Hole.f *= holes[i]->weight;
 			Z = Z - Hole;
 			if (Z.f < -2) Z.f = -2;
@@ -494,7 +510,6 @@ public:
 		if (valid) {
 			float dt = tend - tstart;
 			
-
 			//-(k (-h + x))/((-h + x)^2 + (-j + y)^2)^(3/2)
 			//-(k (-j + y))/((-h + x)^2 + (-j + y)^2)^(3/2)
 
@@ -505,7 +520,7 @@ public:
 			}
 			
 			normal = normalize(normal);
-			vec3 g = vec3(0, 0, -1);
+			vec3 g = vec3(0.0f, 0.0f, -10.0f);
 			float a = dot(g, normal);
 			vec3 perpendicular = a * normal;
 			vec3 parallel = g - perpendicular;
@@ -517,22 +532,26 @@ public:
 			translation = translation + velocity * (dt) ;
 			float z = 0;
 			for (size_t i = 0; i < holes.size(); i++) {
-				z -= holes[i]->weight * powf((powf(powf(translation.x - holes[i]->pos.x, 2) + powf(translation.y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.05f), -1.0f);
-				if (length(holes[i]->pos - vec2(translation.x, translation.y))  < 0.14f) valid = false; 
+				z -= holes[i]->weight * powf((powf(powf(translation.x - holes[i]->pos.x, 2) + powf(translation.y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.005f), -1.0f);
+				if (length(holes[i]->pos - vec2(translation.x, translation.y)) < 0.1f) { 
+					valid = false; 
+					printf("%d\n", i);
+				}
 			}
 			//printf("%lf %lf %lf\n", translation.x, translation.y, translation.z);
 			//if (translation.z < -0.07f) valid = false;
 			
 
-			translation.z = z;
+			translation.z = 0.05;
 			normal = vec3(0, 0, 1);
 			for (size_t i = 0; i < holes.size(); i++) {
 				normal.x = -1 * (holes[i]->weight * (-holes[i]->pos.x + translation.x)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
 				normal.y = -1 * (holes[i]->weight * (-holes[i]->pos.y + translation.y)) / powf(powf(-holes[i]->pos.x + translation.x, 2) + powf(-holes[i]->pos.y + translation.y, 2), 1.5f);
 			}
 			//printf("%lf %lf %lf\n", normal.x, normal.y, normal.z);
+			normal = normalize(normal);
 			
-			translation = translation + normal * 0.1f;
+			//translation = translation +  * 0.05f;
 			
 			if (abs(translation.x) > 2) {
 				float dx = abs(translation.x) - 2;
@@ -547,7 +566,6 @@ public:
 				if (translation.y < -2) translation.y += dy;
 				else translation.y += dy;
 			}
-
 			
 		}
 	}
@@ -598,7 +616,7 @@ public:
 		// Create objects by setting up their vertex data on the GPU
 		Object* sphereObject1 = new Object(phongShader, material0, new SimpleTexture(), sphere);
 		sphereObject1->translation = vec3(-1.8f, -1.8f, 0.1f);
-		sphereObject1->scale = vec3(0.1f, 0.1f, 0.1f);
+		sphereObject1->scale = vec3(0.05f, 0.05f, 0.05f);
 		//balls.push_back(sphereObject1);
 		nextBall = sphereObject1;
 
@@ -623,7 +641,7 @@ public:
 		lights[0]->wLightPos = vec4(-3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
 		lights[0]->originalPos = vec4(-3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
 		lights[0]->La = vec3(1.2f, 1.2f, 1.2f);
-		lights[0]->Le = vec3(5, 5, 5);
+		lights[0]->Le = vec3(3, 3, 3);
 		lights[0]->rotationAxis = vec4(3.5f, 0, 1.0f, 1.0f);
 		//lights[0]->rotationAxis = normalize(lights[0]->rotationAxis);
 		
@@ -631,7 +649,7 @@ public:
 		lights[1]->wLightPos = vec4(3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
 		lights[1]->originalPos = vec4(3.5f, 0, 1.0f, 1.0f);	// ideal point -> directional light source
 		lights[1]->La = vec3(1.2f, 1.2f, 1.2f);
-		lights[1]->Le = vec3(5, 5, 5);
+		lights[1]->Le = vec3(3, 3, 3);
 		lights[1]->rotationAxis = vec4(-3.5f, 0, 1.0f, 1.0f);
 
 		
@@ -655,14 +673,18 @@ public:
 			state.P = projectiveCamera->P();
 		}
 		state.lights = lights;
+		state.plain = 1;
 		plainObject->Draw(state);
+		state.plain = 0;
 		nextBall->Draw(state);
 		for (Object* obj : balls) { if (obj->valid)obj->Draw(state); }
 	}
 
 	void Animate(float tstart, float tend) {
 		//plainObject->Animate(tstart, tend);
-		for (Object* obj : balls) obj->Animate(tstart, tend);
+		for (Object* obj : balls) {
+			if (obj->valid) obj->Animate(tstart, tend);
+		}
 		for (Light* light : lights) light->Animate(tstart, tend);
 	}
 };
@@ -716,13 +738,13 @@ void onMouse(int button, int state, int pX, int pY) {
 
 		Object* sphereObject = new Object(new PhongShader(), material0, new SimpleTexture(), new Sphere());
 		sphereObject->translation = vec3(-1.8f, -1.8f, 0.1f);
-		sphereObject->scale = vec3(0.1f, 0.1f, 0.1f);
+		sphereObject->scale = vec3(0.05f, 0.05f, 0.05f);
 		//scene.balls.push_back(sphereObject);
 		scene.nextBall = sphereObject;
 	}
 	else if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
 		holes.push_back(new Hole(holeDepth, vec2(cX, cY)));
-		holeDepth += 0.01;
+		holeDepth += 0.01f;
 		
 		scene.plainObject= new Object(new PhongShader(), material0, new CheckerBoardTexture(15, 20), new RubberPlain());
 		scene.plainObject->scale = vec3(2, 2, 1);
