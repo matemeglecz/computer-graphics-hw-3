@@ -387,11 +387,8 @@ public:
 
 std::vector<Hole*> holes;
 
-
 class RubberPlain : public ParamSurface {
 public:
-	
-
 	RubberPlain() { create(); }
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
 		U = U * 2 - 1;
@@ -450,6 +447,7 @@ public:
 	virtual void Animate(float tstart, float tend) { 
 		if (valid) {
 			float dt = tend - tstart;
+			float E = 0.5f * powf(length(velocity), 2) + realCoordinate.z * 10.0f;
 
 			vec3 normal = vec3(0, 0, 1);
 			for (size_t i = 0; i < holes.size(); i++) {
@@ -463,18 +461,26 @@ public:
 			vec3 perpendicular = a * normal;
 			vec3 parallel = g - perpendicular;
 			velocity = velocity + parallel * dt;
-			if (dot(velocity, vec3(0, 0, -1)) > 0.7f*length(velocity)) {
-				valid = false;
-			}
 
+			normal = vec3(0, 0, 1);
 			realCoordinate = realCoordinate + velocity * (dt) ;
 			float z = 0;
 			for (size_t i = 0; i < holes.size(); i++) {
 				z -= holes[i]->weight * powf((powf(powf(realCoordinate.x - holes[i]->pos.x, 2) + powf(realCoordinate.y - holes[i]->pos.y, 2), 0.5f) + 4.0f * 0.005f), -1.0f);
 				if (length(holes[i]->pos - vec2(realCoordinate.x, realCoordinate.y)) < 0.04f) {
 					valid = false;
+					translation.x = realCoordinate.x;
+					translation.y = realCoordinate.y;
+					translation.z = z;
+					return;
 				}
+				normal.x = -1 * (holes[i]->weight * (-holes[i]->pos.x + realCoordinate.x)) / powf(powf(-holes[i]->pos.x + realCoordinate.x, 2) + powf(-holes[i]->pos.y + realCoordinate.y, 2), 1.5f);
+				normal.y = -1 * (holes[i]->weight * (-holes[i]->pos.y + realCoordinate.y)) / powf(powf(-holes[i]->pos.x + realCoordinate.x, 2) + powf(-holes[i]->pos.y + realCoordinate.y, 2), 1.5f);
 			}
+			normal = normalize(normal);
+
+			realCoordinate.z = z;
+			velocity = normalize(velocity) * sqrtf((E - (realCoordinate.z * 10.0f)) * 2.0f);
 
 			if (abs(realCoordinate.x) > 2) {
 				float dx = abs(realCoordinate.x) - 2;
@@ -493,12 +499,6 @@ public:
 			translation.x = realCoordinate.x;
 			translation.y = realCoordinate.y;
 			translation.z = z;
-			normal = vec3(0, 0, 1);
-			for (size_t i = 0; i < holes.size(); i++) {
-				normal.x = -1 * (holes[i]->weight * (-holes[i]->pos.x + realCoordinate.x)) / powf(powf(-holes[i]->pos.x + realCoordinate.x, 2) + powf(-holes[i]->pos.y + realCoordinate.y, 2), 1.5f);
-				normal.y = -1 * (holes[i]->weight * (-holes[i]->pos.y + realCoordinate.y)) / powf(powf(-holes[i]->pos.x + realCoordinate.x, 2) + powf(-holes[i]->pos.y + realCoordinate.y, 2), 1.5f);
-			}
-			normal = normalize(normal);
 			
 			translation = translation + normal * 0.08f;
 		}
@@ -590,7 +590,7 @@ public:
 			else {
 				projectiveCamera->wEye = currentBall->translation + normalize(currentBall->velocity) * (0.08f + epsilon);
 				projectiveCamera->wLookat = currentBall->translation + currentBall->velocity;
-				projectiveCamera->wVup = -cross(-currentBall->velocity, vec3(-currentBall->velocity.y, currentBall->velocity.x, currentBall->velocity.z));
+				projectiveCamera->wVup = normalize(cross(currentBall->velocity, vec3(-currentBall->velocity.y, currentBall->velocity.x, currentBall->velocity.z)));
 			}
 			state.wEye = projectiveCamera->wEye;
 			state.V = projectiveCamera->V();
